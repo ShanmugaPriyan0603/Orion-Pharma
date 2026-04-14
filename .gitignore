@@ -15,6 +15,7 @@ build/
 # IDE
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 *~
@@ -29,6 +30,7 @@ blockchain/artifacts/
 
 # MongoDB data (if running locally from project)
 data/db/
+.mongo-data/
 
 # Temporary files
 tmp/
