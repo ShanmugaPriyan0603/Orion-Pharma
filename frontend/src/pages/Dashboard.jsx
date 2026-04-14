@@ -85,7 +85,7 @@ const Dashboard = () => {
           <div className="flex justify-between items-center">
             <Link to="/" className="flex items-center gap-3">
               <div className="text-2xl">💊</div>
-              <span className="text-lg font-semibold tracking-tight">PharmaChain</span>
+              <span className="text-lg font-semibold tracking-tight">Orion-PharmaChain</span>
             </Link>
             <div className="flex items-center gap-6">
               <Link to="/" className="text-sm text-gray-900 font-medium">Dashboard</Link>
