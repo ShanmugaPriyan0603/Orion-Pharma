@@ -48,7 +48,8 @@ const MapView = ({
   origin,
   destination,
   originCoordinates,
-  destinationCoordinates
+  destinationCoordinates,
+  routeTone
 }) => {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
@@ -84,6 +85,14 @@ const MapView = ({
       destinationCoordinates
     });
 
+    const routeColor = routeTone === 'critical'
+      ? '#ff3b30'
+      : routeTone === 'warning'
+        ? '#ff9500'
+        : routeTone === 'safe'
+          ? '#34c759'
+          : '#0071e3';
+
     const markers = [];
 
     if (dynamicRoute) {
@@ -91,7 +100,7 @@ const MapView = ({
       const routePoints = routeNodes.map((node) => [node.lat, node.lng]);
 
       L.polyline(routePoints, {
-        color: '#0071e3',
+        color: routeColor,
         weight: 4,
         opacity: 0.8
       }).addTo(map);
@@ -165,7 +174,7 @@ const MapView = ({
 
       if (routePoints.length > 1) {
         L.polyline(routePoints, {
-          color: '#34c759',
+          color: routeColor === '#0071e3' ? '#34c759' : routeColor,
           weight: 3,
           opacity: 0.8,
           dashArray: '8, 8'

@@ -92,6 +92,7 @@ const Dashboard = () => {
             <div className="flex items-center gap-6">
               <Link to="/" className="text-sm text-gray-900 font-medium">Dashboard</Link>
               <Link to="/inventory" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">Inventory</Link>
+              <Link to="/cold-chain" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">Cold Chain</Link>
               <Link to="/verify" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">Verify</Link>
             </div>
           </div>
