@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Build outputs
+dist/
+build/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Blockchain
+blockchain/cache/
+blockchain/artifacts/
+
+# MongoDB data (if running locally from project)
+data/db/
+
+# Temporary files
+tmp/
+temp/
+*.tmp

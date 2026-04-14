@@ -1,0 +1,14 @@
+{
+  "name": "pharmachain-intelligence-system",
+  "version": "1.0.0",
+  "description": "Smart pharmaceutical supply chain monitoring system with blockchain verification",
+  "scripts": {
+    "install:all": "cd backend && npm install && cd ../frontend && npm install && cd ../blockchain && npm install",
+    "backend": "cd backend && npm run dev",
+    "frontend": "cd frontend && npm run dev",
+    "blockchain": "cd blockchain && npx hardhat node"
+  },
+  "keywords": ["blockchain", "supply-chain", "pharmaceutical", "iot", "ethereum"],
+  "author": "",
+  "license": "MIT"
+}
