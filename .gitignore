@@ -1,3 +1,10 @@
+# Startup notes:
+# 1. Start MongoDB first on 127.0.0.1:27017.
+# 2. If the service is not available, start it manually with:
+#    mongod --dbpath .mongo-data --port 27017 --bind_ip 127.0.0.1
+# 3. Then run start.bat --no-pause from the repo root.
+# 4. Verify /api/health returns mongoConnected=true before testing batch details.
+
 # Dependencies
 node_modules/
 package-lock.json

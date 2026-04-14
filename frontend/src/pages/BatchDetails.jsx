@@ -7,6 +7,28 @@ import TrustScoreCard from '../components/TrustScoreCard';
 import AlertPanel from '../components/AlertPanel';
 import Timeline from '../components/Timeline';
 import SimulationControls from '../components/SimulationControls';
+import { haversineDistanceKm } from '../utils/routePlanner';
+
+const AVERAGE_ROAD_FACTOR = 1.25;
+const AVERAGE_SPEED_KMPH = 70;
+
+const formatDuration = (minutes) => {
+  if (!Number.isFinite(minutes) || minutes < 0) return '—';
+
+  const totalMinutes = Math.max(1, Math.round(minutes));
+  const hours = Math.floor(totalMinutes / 60);
+  const remainingMinutes = totalMinutes % 60;
+
+  if (hours === 0) {
+    return `${remainingMinutes} min`;
+  }
+
+  if (remainingMinutes === 0) {
+    return `${hours} hr`;
+  }
+
+  return `${hours} hr ${remainingMinutes} min`;
+};
 
 const BatchDetails = () => {
   const { batchId } = useParams();
@@ -14,6 +36,19 @@ const BatchDetails = () => {
   const { getBatchDetails, fetchBatches, deleteBatch } = useBatch();
   const [batchData, setBatchData] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const routeStats = batchData?.originCoordinates && batchData?.destinationCoordinates
+    ? (() => {
+        const directDistanceKm = haversineDistanceKm(batchData.originCoordinates, batchData.destinationCoordinates);
+        const roadDistanceKm = directDistanceKm * AVERAGE_ROAD_FACTOR;
+        const etaMinutes = (roadDistanceKm / AVERAGE_SPEED_KMPH) * 60;
+
+        return {
+          roadDistanceKm,
+          etaMinutes
+        };
+      })()
+    : null;
 
   const loadBatch = useCallback(async () => {
     const response = await getBatchDetails(batchId);
@@ -173,6 +208,18 @@ const BatchDetails = () => {
                 <div className="flex justify-between">
                   <span className="text-gray-500">Destination</span>
                   <span className="font-medium">{batchData.destination}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Road Distance</span>
+                  <span className="font-medium">
+                    {routeStats ? `${routeStats.roadDistanceKm.toFixed(1)} km` : '—'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">ETA @ 70 km/h</span>
+                  <span className="font-medium">
+                    {routeStats ? formatDuration(routeStats.etaMinutes) : '—'}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Current Stage</span>
