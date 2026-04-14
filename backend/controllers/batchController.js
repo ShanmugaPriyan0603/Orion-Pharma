@@ -30,6 +30,7 @@ const createBatch = async (req, res) => {
       destination,
       originCoordinates,
       destinationCoordinates,
+      quantityInStock,
       temperature
     } = req.body;
 
@@ -62,6 +63,7 @@ const createBatch = async (req, res) => {
       destination,
       originCoordinates,
       destinationCoordinates,
+      quantityInStock,
       temperature: temperature || 22,
       stages: [{
         name: manufacturerInfo.name,
@@ -107,6 +109,7 @@ const createBatch = async (req, res) => {
         destination: batch.destination,
         originCoordinates: batch.originCoordinates,
         destinationCoordinates: batch.destinationCoordinates,
+        quantityInStock: batch.quantityInStock,
         currentStage: batch.currentStage,
         temperature: batch.temperature,
         trustScore: batch.trustScore,
@@ -141,6 +144,7 @@ const getAllBatches = async (req, res) => {
         destination: batch.destination,
         originCoordinates: batch.originCoordinates,
         destinationCoordinates: batch.destinationCoordinates,
+        quantityInStock: batch.quantityInStock,
         currentStage: batch.currentStage,
         temperature: batch.temperature,
         trustScore: batch.trustScore,
@@ -247,6 +251,7 @@ const verifyBatch = async (req, res) => {
         destination: batch.destination,
         currentStage: batch.currentStage,
         temperature: batch.temperature,
+        quantityInStock: batch.quantityInStock,
         targetTempRange: {
           min: batch.targetTempMin,
           max: batch.targetTempMax

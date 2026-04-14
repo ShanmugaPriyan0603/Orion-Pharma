@@ -19,6 +19,7 @@ const Dashboard = () => {
     destination: '',
     originCoordinates: null,
     destinationCoordinates: null,
+    quantityInStock: '',
     temperature: 22
   });
 
@@ -59,6 +60,7 @@ const Dashboard = () => {
         destination: '',
         originCoordinates: null,
         destinationCoordinates: null,
+        quantityInStock: '',
         temperature: 22
       });
     } catch (error) {
@@ -89,6 +91,7 @@ const Dashboard = () => {
             </Link>
             <div className="flex items-center gap-6">
               <Link to="/" className="text-sm text-gray-900 font-medium">Dashboard</Link>
+              <Link to="/inventory" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">Inventory</Link>
               <Link to="/verify" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">Verify</Link>
             </div>
           </div>
@@ -193,6 +196,14 @@ const Dashboard = () => {
                     destinationCoordinates: { lat: location.lat, lng: location.lng }
                   }))}
                   required
+                />
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="Quantity in Stock"
+                  value={formData.quantityInStock}
+                  onChange={(e) => setFormData({ ...formData, quantityInStock: e.target.value })}
+                  className="input-field"
                 />
                 <div className="flex gap-2">
                   <button type="submit" className="btn-primary flex-1 text-sm py-2">

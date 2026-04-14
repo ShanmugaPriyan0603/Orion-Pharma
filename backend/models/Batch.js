@@ -27,6 +27,11 @@ const batchSchema = new mongoose.Schema({
     lat: Number,
     lng: Number
   },
+  quantityInStock: {
+    type: Number,
+    default: null,
+    min: 0
+  },
   currentStage: {
     type: String,
     enum: ['manufacturer', 'warehouse', 'distributor', 'pharmacy'],
