@@ -72,6 +72,11 @@ const MapView = ({
     const map = mapInstance.current;
     if (!map) return;
 
+    // Ensure Leaflet recalculates dimensions when parent layout changes.
+    setTimeout(() => {
+      map.invalidateSize();
+    }, 0);
+
     map.eachLayer((layer) => {
       if (layer instanceof L.Marker || layer instanceof L.Polyline) {
         map.removeLayer(layer);
@@ -187,7 +192,7 @@ const MapView = ({
       map.fitBounds(group.getBounds().pad(0.2));
     }
 
-  }, [currentStage, stages, origin, destination, originCoordinates, destinationCoordinates]);
+  }, [currentStage, stages, origin, destination, originCoordinates, destinationCoordinates, routeTone]);
 
   return (
     <div className="relative w-full h-full min-h-[300px] rounded-2xl overflow-hidden border border-gray-200 map-container">

@@ -504,6 +504,34 @@ const ColdChain = () => {
       : buildFleetChartData(detailedBatches);
   }, [chartBatch, chartMode, detailedBatches]);
 
+  const chartTemperatureValues = useMemo(() => {
+    const values = chartMode === 'selected'
+      ? normalizeHistory(chartBatch?.temperatureHistory || []).map((entry) => entry.temperature)
+      : detailedBatches.flatMap((batch) => normalizeHistory(batch.temperatureHistory || []).map((entry) => entry.temperature));
+
+    return values.filter((value) => Number.isFinite(value));
+  }, [chartBatch, chartMode, detailedBatches]);
+
+  const yAxisBounds = useMemo(() => {
+    if (!chartTemperatureValues.length) {
+      return { min: 0, max: 12 };
+    }
+
+    const minTemp = Math.min(...chartTemperatureValues, COLD_CHAIN_RANGE.min);
+    const maxTemp = Math.max(...chartTemperatureValues, COLD_CHAIN_RANGE.max);
+    const span = Math.max(2, maxTemp - minTemp);
+    const padding = Math.max(1, span * 0.2);
+
+    const min = Math.max(0, Math.floor(minTemp - padding));
+    let max = Math.ceil(maxTemp + padding);
+
+    if (max - min < 6) {
+      max = min + 6;
+    }
+
+    return { min, max };
+  }, [chartTemperatureValues]);
+
   const chartOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
@@ -561,11 +589,11 @@ const ColdChain = () => {
           font: { size: 10, family: '-apple-system, BlinkMacSystemFont, sans-serif' },
           callback: (value) => `${value}°C`
         },
-        min: 0,
-        max: 18
+        min: yAxisBounds.min,
+        max: yAxisBounds.max
       }
     }
-  }), []);
+  }), [yAxisBounds.max, yAxisBounds.min]);
 
   const currentTemperature = chartMode === 'selected'
     ? chartBatch?.temperature ?? null
@@ -737,7 +765,7 @@ const ColdChain = () => {
           </div>
         </section>
 
-        <section className="grid gap-6 xl:grid-cols-[1.6fr_1fr]">
+        <section className="space-y-6">
           <div className="card">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
               <div>
@@ -831,7 +859,7 @@ const ColdChain = () => {
             </div>
           </div>
 
-          <div className="space-y-6">
+          <div className="grid gap-6 lg:grid-cols-2">
             <div className="card">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="font-semibold">Active Alerts & Predictions</h3>
@@ -922,12 +950,13 @@ const ColdChain = () => {
               </div>
             </div>
 
-            <div className="card">
+            <div className="card lg:col-span-2">
               <h3 className="font-semibold mb-4">Shipment Journey with Temperature Overlay</h3>
               {selectedBatch ? (
                 <div className="space-y-4">
-                  <div className="rounded-2xl border border-gray-200 overflow-hidden">
+                  <div className="rounded-2xl border border-gray-200 overflow-hidden h-80">
                     <MapView
+                      key={selectedBatch.batchId}
                       currentStage={selectedBatch.currentStage}
                       stages={selectedBatch.stages}
                       origin={selectedBatch.origin}
