@@ -6,6 +6,8 @@ import TrustScoreCard from '../components/TrustScoreCard';
 import Timeline from '../components/Timeline';
 import TemperatureChart from '../components/TemperatureChart';
 
+const DEFAULT_TARGET_RANGE = { min: 2, max: 8 };
+
 const formatDateTime = (value) => {
   if (!value) return 'Not available';
   const date = new Date(value);
@@ -95,6 +97,31 @@ const buildVerificationReport = (result) => {
   ].join('\n');
 };
 
+const buildCompactQrReport = (result) => {
+  if (!result) return '';
+
+  const primaryHash = result.blockchainVerifications?.batchHash || result.blockchainHash || 'Not available';
+  const targetRange = result.targetTempRange
+    ? `${result.targetTempRange.min}°C - ${result.targetTempRange.max}°C`
+    : 'Not available';
+
+  return [
+    'Orion-Pharma Verification Snapshot',
+    '===================================',
+    `Batch ID: ${escapeText(result.batchId)}`,
+    `Medicine Name: ${escapeText(result.medicineName)}`,
+    `Verified: ${result.verified ? 'YES' : 'NO'}`,
+    `Trust Score: ${Number.isFinite(result.trustScore) ? result.trustScore : 'Not available'}`,
+    `Current Stage: ${escapeText(result.currentStage)}`,
+    `Current Temperature: ${Number.isFinite(result.temperature) ? `${result.temperature}°C` : 'Not available'}`,
+    `Safe Range: ${targetRange}`,
+    `Primary Hash: ${escapeText(primaryHash)}`,
+    `Verified At: ${formatDateTime(result.verifiedAt)}`,
+    '',
+    'Note: Full verification report is available in app download.'
+  ].join('\n');
+};
+
 const downloadTextFile = (filename, content) => {
   const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
   const url = URL.createObjectURL(blob);
@@ -118,10 +145,22 @@ const Verify = () => {
     () => buildVerificationReport(verificationResult),
     [verificationResult]
   );
+  const qrReport = useMemo(() => {
+    if (!verificationResult) return '';
+
+    // Long plain-text payloads can overflow QR capacity and crash rendering.
+    const fullEncodedLength = encodeURIComponent(verificationReport).length;
+    if (fullEncodedLength <= 1800) {
+      return verificationReport;
+    }
+
+    return buildCompactQrReport(verificationResult);
+  }, [verificationReport, verificationResult]);
+
   const qrValue = useMemo(() => {
-    if (!verificationReport) return '';
-    return `data:text/plain;charset=utf-8,${encodeURIComponent(verificationReport)}`;
-  }, [verificationReport]);
+    if (!qrReport) return '';
+    return `data:text/plain;charset=utf-8,${encodeURIComponent(qrReport)}`;
+  }, [qrReport]);
 
   const handleVerify = async (e) => {
     e.preventDefault();
@@ -133,7 +172,7 @@ const Verify = () => {
 
     try {
       const response = await verifyBatch(batchId.trim());
-      setVerificationResult(response.data);
+      setVerificationResult(response?.data || null);
     } catch (err) {
       setError(err.response?.data?.error || 'Batch not found');
     } finally {
@@ -144,10 +183,13 @@ const Verify = () => {
   const handleDownloadVerificationReport = () => {
     if (!verificationReport || !verificationResult) return;
     downloadTextFile(
-      `verification-report-${verificationResult.batchId.toLowerCase()}.txt`,
+      `verification-report-${String(verificationResult.batchId || 'batch').toLowerCase()}.txt`,
       verificationReport
     );
   };
+
+  const safeJourney = Array.isArray(verificationResult?.journey) ? verificationResult.journey : [];
+  const safeTargetRange = verificationResult?.targetTempRange || DEFAULT_TARGET_RANGE;
 
   return (
     <div className="min-h-screen bg-white">
@@ -275,7 +317,7 @@ const Verify = () => {
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 uppercase tracking-wide">Temperature</p>
-                  <p className={`font-semibold mt-0.5 ${verificationResult.temperature > verificationResult.targetTempRange.max || verificationResult.temperature < verificationResult.targetTempRange.min
+                  <p className={`font-semibold mt-0.5 ${verificationResult.temperature > safeTargetRange.max || verificationResult.temperature < safeTargetRange.min
                     ? 'text-red-500'
                     : 'text-green-500'
                   }`}>
@@ -345,7 +387,7 @@ const Verify = () => {
             <div className="card">
               <h3 className="text-sm font-semibold mb-4">Journey History</h3>
               <Timeline
-                stages={verificationResult.journey.map(j => ({
+                stages={safeJourney.map(j => ({
                   location: j.location,
                   timestamp: j.timestamp,
                   temperature: j.temperature
@@ -375,11 +417,11 @@ const Verify = () => {
               </div>
               <div className="stat-card text-center">
                 <p className="stat-label">Journey Stages</p>
-                <p className="stat-value mt-1">{verificationResult.journey.length}</p>
+                <p className="stat-value mt-1">{safeJourney.length}</p>
               </div>
               <div className="stat-card text-center">
                 <p className="stat-label">Safe Range</p>
-                <p className="stat-value mt-1 text-base">{verificationResult.targetTempRange.min}°C - {verificationResult.targetTempRange.max}°C</p>
+                <p className="stat-value mt-1 text-base">{safeTargetRange.min}°C - {safeTargetRange.max}°C</p>
               </div>
             </div>
           </div>

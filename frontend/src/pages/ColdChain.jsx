@@ -451,24 +451,41 @@ const ColdChain = () => {
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [simulating, setSimulating] = useState(false);
 
+  // Ensure batches are loaded on mount
+  useEffect(() => {
+    if (!batches || batches.length === 0) {
+      console.log('Fetching batches from backend...');
+      fetchBatches();
+    }
+  }, []);
+
+  // Include in-transit AND delivered batches for comprehensive cold chain monitoring
   const monitoredBatches = useMemo(
-    () => batches.filter((batch) => batch.status !== 'delivered'),
+    () => batches.filter((batch) => batch && batch.batchId && (batch.status === 'in-transit' || batch.status === 'delivered' || !batch.status)),
     [batches]
   );
 
   const selectedBatch = useMemo(() => {
-    return detailedBatches.find((batch) => batch.batchId === selectedBatchId) || detailedBatches[0] || null;
+    if (selectedBatchId && detailedBatches.length > 0) {
+      const found = detailedBatches.find((batch) => batch.batchId === selectedBatchId);
+      if (found) return found;
+    }
+    return detailedBatches[0] || null;
   }, [detailedBatches, selectedBatchId]);
+  
   const selectedRange = useMemo(() => getTargetRange(selectedBatch), [selectedBatch]);
 
+  // Auto-select first batch on mount or when list changes
   useEffect(() => {
+    if (monitoredBatches.length === 0) {
+      setSelectedBatchId('');
+      return;
+    }
+    
     if (!selectedBatchId && monitoredBatches[0]) {
       setSelectedBatchId(monitoredBatches[0].batchId);
     }
-    if (selectedBatchId && !monitoredBatches.some((batch) => batch.batchId === selectedBatchId)) {
-      setSelectedBatchId(monitoredBatches[0]?.batchId || '');
-    }
-  }, [monitoredBatches, selectedBatchId]);
+  }, [monitoredBatches]);
 
   useEffect(() => {
     let active = true;
@@ -483,6 +500,7 @@ const ColdChain = () => {
       }
 
       setLoadingDetails(true);
+      console.log(`Loading cold chain data for ${monitoredBatches.length} batches`);
 
       try {
         const [batchResults, activeAlertResponse, resolvedAlertResponse] = await Promise.all([
@@ -491,13 +509,15 @@ const ColdChain = () => {
               try {
                 const [detailsResponse, predictionResponse] = await Promise.all([
                   batchAPI.getById(batch.batchId),
-                  simulationAPI.predict(batch.batchId)
+                  simulationAPI.predict(batch.batchId).catch(() => ({ data: { data: null } }))
                 ]);
 
-                const details = detailsResponse.data.data || batch;
-                const prediction = predictionResponse.data.data || null;
-                const normalizedStages = details.stages || batch.stages || [];
-                const normalizedHistory = details.temperatureHistory || [];
+                const details = detailsResponse?.data?.data || batch;
+                const prediction = predictionResponse?.data?.data || null;
+                const normalizedStages = (details.stages || batch.stages || []).filter(s => s && s.timestamp);
+                const normalizedHistory = (details.temperatureHistory || batch.temperatureHistory || []).filter(h => h && h.timestamp);
+
+                console.log(`Loaded batch ${batch.batchId}: ${normalizedHistory.length} temp readings, ${normalizedStages.length} stages`);
 
                 return {
                   ...batch,
@@ -507,7 +527,8 @@ const ColdChain = () => {
                   prediction,
                   reachedPharmacyAt: normalizedStages.find((stage) => stage.location === 'pharmacy')?.timestamp || null
                 };
-              } catch {
+              } catch (error) {
+                console.warn(`Error loading batch details for ${batch.batchId}:`, error.message);
                 return {
                   ...batch,
                   temperatureHistory: batch.temperatureHistory || [],
@@ -518,15 +539,18 @@ const ColdChain = () => {
               }
             })
           ),
-          alertAPI.getAll({ resolved: 'false', limit: 200 }),
-          alertAPI.getAll({ resolved: 'true', limit: 200 })
+          alertAPI.getAll({ resolved: 'false', limit: 200 }).catch(() => ({ data: { data: [] } })),
+          alertAPI.getAll({ resolved: 'true', limit: 200 }).catch(() => ({ data: { data: [] } }))
         ]);
 
         if (!active) return;
 
+        console.log(`Cold chain data loaded: ${batchResults.length} batches, ${activeAlertResponse.data.data?.length || 0} active alerts`);
         setDetailedBatches(batchResults);
         setActiveAlerts(activeAlertResponse.data.data || []);
         setResolvedAlerts(resolvedAlertResponse.data.data || []);
+      } catch (error) {
+        console.error('Cold chain data loading failed:', error);
       } finally {
         if (active) {
           setLoadingDetails(false);
@@ -547,17 +571,27 @@ const ColdChain = () => {
     }
   }, [detailedBatches, selectedBatchId]);
 
-  useEffect(() => {
-    if (activeContextAlerts.length && !activeAlerts.length) {
-      setActiveAlerts(activeContextAlerts);
+  // Chart data - ensure it updates when batch or mode changes
+  const chartBatch = useMemo(() => {
+    if (chartMode === 'selected') {
+      if (selectedBatchId && detailedBatches.length > 0) {
+        const found = detailedBatches.find((b) => b.batchId === selectedBatchId);
+        if (found) {
+          console.log(`Chart batch selected: ${found.batchId}, temps: ${(found.temperatureHistory || []).length}`);
+          return found;
+        }
+      }
+      return detailedBatches[0] || null;
     }
-  }, [activeContextAlerts, activeAlerts.length]);
+    return detailedBatches[0] || null;
+  }, [chartMode, selectedBatchId, detailedBatches]);
 
-  const chartBatch = selectedBatch || detailedBatches[0] || null;
   const chartData = useMemo(() => {
-    return chartMode === 'selected'
+    const data = chartMode === 'selected'
       ? buildSelectedChartData(chartBatch)
       : buildFleetChartData(detailedBatches);
+    console.log(`Chart data updated: mode=${chartMode}, labels=${data.labels?.length || 0}, series=${data.datasets?.length || 0}`);
+    return data;
   }, [chartBatch, chartMode, detailedBatches]);
 
   const chartTemperatureValues = useMemo(() => {
@@ -585,6 +619,7 @@ const ColdChain = () => {
       max = min + 6;
     }
 
+    console.log(`Y-axis: [${min}, ${max}], values: [${minTemp.toFixed(1)}, ${maxTemp.toFixed(1)}]`);
     return { min, max };
   }, [chartTemperatureValues]);
 
