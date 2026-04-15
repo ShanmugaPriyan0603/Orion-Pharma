@@ -50,6 +50,11 @@ const batchSchema = new mongoose.Schema({
     type: Number,
     default: 8
   },
+  shelfLifeHours: {
+    type: Number,
+    default: null,
+    min: 0
+  },
   trustScore: {
     type: Number,
     default: 100,

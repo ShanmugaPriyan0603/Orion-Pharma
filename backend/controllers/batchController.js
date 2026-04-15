@@ -260,6 +260,19 @@ const verifyBatch = async (req, res) => {
       batchId: batch.batchId,
       resolved: false
     });
+    const warehouseStage = [...batch.stages].reverse().find(stage => stage.location === 'warehouse') || batch.stages.find(stage => stage.location === 'warehouse');
+    const warehouseTimestamp = warehouseStage?.timestamp || null;
+    const shelvedDurationMinutes = warehouseTimestamp
+      ? Math.max(0, (Date.now() - new Date(warehouseTimestamp).getTime()) / 60000)
+      : null;
+    const verificationTrail = logs
+      .filter(log => log.blockchainHash)
+      .map(log => ({
+        type: log.type,
+        timestamp: log.timestamp,
+        value: log.value,
+        blockchainHash: log.blockchainHash
+      }));
 
     res.json({
       success: true,
@@ -271,6 +284,10 @@ const verifyBatch = async (req, res) => {
         currentStage: batch.currentStage,
         temperature: batch.temperature,
         quantityInStock: batch.quantityInStock,
+        shelfLifeHours: batch.shelfLifeHours ?? null,
+        warehouseTimestamp,
+        shelvedDurationMinutes,
+        verifiedAt: new Date(),
         targetTempRange: {
           min: batch.targetTempMin,
           max: batch.targetTempMax
@@ -282,6 +299,11 @@ const verifyBatch = async (req, res) => {
         verified: !!batch.blockchainHash,
         activeAlerts: activeAlerts.length,
         totalLogs: logs.length,
+        blockchainVerifications: {
+          batchHash: batch.blockchainHash,
+          logHashes: verificationTrail.map(entry => entry.blockchainHash)
+        },
+        verificationTrail,
         journey: batch.stages.map(stage => ({
           stage: stage.name,
           location: stage.location,

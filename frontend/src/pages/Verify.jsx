@@ -1,9 +1,111 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { QRCodeSVG } from 'qrcode.react';
 import { useBatch } from '../context/BatchContext';
 import TrustScoreCard from '../components/TrustScoreCard';
 import Timeline from '../components/Timeline';
 import TemperatureChart from '../components/TemperatureChart';
+
+const formatDateTime = (value) => {
+  if (!value) return 'Not available';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Not available';
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'medium'
+  }).format(date);
+};
+
+const formatDuration = (minutes) => {
+  if (!Number.isFinite(minutes) || minutes < 0) return 'Not available';
+  const rounded = Math.max(1, Math.round(minutes));
+  const hours = Math.floor(rounded / 60);
+  const remainingMinutes = rounded % 60;
+
+  if (hours === 0) {
+    return `${remainingMinutes} min`;
+  }
+
+  if (remainingMinutes === 0) {
+    return `${hours} hr`;
+  }
+
+  return `${hours} hr ${remainingMinutes} min`;
+};
+
+const escapeText = (value) => String(value ?? '').replace(/\r?\n/g, ' ').trim();
+
+const buildVerificationReport = (result) => {
+  if (!result) return '';
+
+  const warehouseTimestamp = result.warehouseTimestamp ? formatDateTime(result.warehouseTimestamp) : 'Not available';
+  const shelvedDuration = formatDuration(result.shelvedDurationMinutes);
+  const shelfLife = Number.isFinite(result.shelfLifeHours)
+    ? `${result.shelfLifeHours} hr`
+    : 'Not configured in record';
+  const verificationHashes = [
+    result.blockchainVerifications?.batchHash || result.blockchainHash || 'Not available',
+    ...(result.blockchainVerifications?.logHashes || [])
+  ].filter(Boolean);
+  const hashLines = verificationHashes.length
+    ? verificationHashes.map((hash, index) => `  ${index + 1}. ${hash}`).join('\n')
+    : '  None recorded';
+  const hashTrail = (result.verificationTrail || []).length
+    ? result.verificationTrail.map((entry) => {
+        const time = formatDateTime(entry.timestamp);
+        const hash = entry.blockchainHash || 'No hash';
+        return `  - ${time} | ${entry.type} | ${hash}`;
+      }).join('\n')
+    : '  No verification trail available';
+
+  return [
+    'Orion-Pharma Verification Report',
+    '=================================',
+    `Batch ID: ${escapeText(result.batchId)}`,
+    `Medicine Name: ${escapeText(result.medicineName)}`,
+    `Blockchain Verified: ${result.verified ? 'YES' : 'NO'}`,
+    `Primary Blockchain Hash: ${escapeText(result.blockchainHash)}`,
+    `Verification Time: ${formatDateTime(result.verifiedAt)}`,
+    '',
+    'Warehouse & Shelf Details',
+    '-------------------------',
+    `Warehouse Reached At: ${warehouseTimestamp}`,
+    `Shelved For: ${shelvedDuration}`,
+    `Shelf Life: ${shelfLife}`,
+    '',
+    'Temperature & Route',
+    '-------------------',
+    `Origin: ${escapeText(result.origin)}`,
+    `Destination: ${escapeText(result.destination)}`,
+    `Current Stage: ${escapeText(result.currentStage)}`,
+    `Current Temperature: ${Number.isFinite(result.temperature) ? `${result.temperature}°C` : 'Not available'}`,
+    `Safe Range: ${result.targetTempRange ? `${result.targetTempRange.min}°C - ${result.targetTempRange.max}°C` : 'Not available'}`,
+    '',
+    'Blockchain Hashes',
+    '-----------------',
+    hashLines,
+    '',
+    'Verification Trail',
+    '------------------',
+    hashTrail,
+    '',
+    'Notes',
+    '-----',
+    'This report is generated from the verified batch record and temperature history.'
+  ].join('\n');
+};
+
+const downloadTextFile = (filename, content) => {
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+};
 
 const Verify = () => {
   const { verifyBatch } = useBatch();
@@ -11,6 +113,15 @@ const Verify = () => {
   const [verificationResult, setVerificationResult] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  const verificationReport = useMemo(
+    () => buildVerificationReport(verificationResult),
+    [verificationResult]
+  );
+  const qrValue = useMemo(() => {
+    if (!verificationReport) return '';
+    return `data:text/plain;charset=utf-8,${encodeURIComponent(verificationReport)}`;
+  }, [verificationReport]);
 
   const handleVerify = async (e) => {
     e.preventDefault();
@@ -28,6 +139,14 @@ const Verify = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDownloadVerificationReport = () => {
+    if (!verificationReport || !verificationResult) return;
+    downloadTextFile(
+      `verification-report-${verificationResult.batchId.toLowerCase()}.txt`,
+      verificationReport
+    );
   };
 
   return (
@@ -56,7 +175,7 @@ const Verify = () => {
         {/* Hero */}
         <div className="text-center mb-10">
           <h1 className="section-title text-3xl md:text-4xl">Verify Medicine Authenticity</h1>
-          <p className="section-subtitle text-gray-500 mt-3">
+          <p className="section-subtitle text-gray-500 mt-3 mx-auto text-center">
             Enter a batch ID to verify the authenticity and safety of your pharmaceutical product
           </p>
         </div>
@@ -166,6 +285,38 @@ const Verify = () => {
               </div>
             </div>
 
+            <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+              <div className="card flex flex-col items-center justify-center text-center gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-gray-500">Verification QR</p>
+                  <p className="text-sm text-gray-500 mt-1">Scans open a plain-text verification report</p>
+                </div>
+                {qrValue ? (
+                  <div className="rounded-2xl bg-white p-3 border border-gray-200">
+                    <QRCodeSVG value={qrValue} size={168} includeMargin />
+                  </div>
+                ) : (
+                  <div className="h-[168px] w-[168px] rounded-2xl border border-dashed border-gray-200 flex items-center justify-center text-xs text-gray-400">
+                    QR unavailable
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={handleDownloadVerificationReport}
+                  className="btn-secondary text-xs py-2 px-3"
+                >
+                  Download Text File
+                </button>
+              </div>
+
+              <div className="card">
+                <h3 className="text-sm font-semibold mb-4">Verification Report Preview</h3>
+                <pre className="whitespace-pre-wrap text-xs leading-6 text-gray-700 bg-gray-50 border border-gray-200 rounded-2xl p-4 max-h-[360px] overflow-auto">
+                  {verificationReport}
+                </pre>
+              </div>
+            </div>
+
             {/* Blockchain Verification */}
             {verificationResult.verified && (
               <div className="card bg-blue-50 border border-blue-200">
@@ -178,6 +329,12 @@ const Verify = () => {
                     </p>
                     <p className="text-xs font-mono text-blue-600 mt-2 break-all">
                       Hash: {verificationResult.blockchainHash}
+                    </p>
+                    <p className="text-xs text-blue-600 mt-1">
+                      Warehouse reached: {formatDateTime(verificationResult.warehouseTimestamp)}
+                    </p>
+                    <p className="text-xs text-blue-600 mt-1">
+                      Shelved for: {formatDuration(verificationResult.shelvedDurationMinutes)}
                     </p>
                   </div>
                 </div>
