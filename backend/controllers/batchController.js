@@ -31,6 +31,8 @@ const createBatch = async (req, res) => {
       originCoordinates,
       destinationCoordinates,
       quantityInStock,
+      targetTempMin,
+      targetTempMax,
       temperature
     } = req.body;
 
@@ -54,6 +56,13 @@ const createBatch = async (req, res) => {
     // Import stage coordinates for initial location
     const { STAGE_COORDINATES } = require('../services/simulationService');
     const manufacturerInfo = STAGE_COORDINATES.manufacturer;
+    const parsedTargetTempMin = Number.isFinite(Number(targetTempMin)) ? Number(targetTempMin) : 2;
+    const parsedTargetTempMax = Number.isFinite(Number(targetTempMax)) ? Number(targetTempMax) : 8;
+    const safeTargetTempMin = Math.min(parsedTargetTempMin, parsedTargetTempMax);
+    const safeTargetTempMax = Math.max(parsedTargetTempMin, parsedTargetTempMax);
+    const defaultTemperature = (safeTargetTempMin + safeTargetTempMax) / 2;
+    const parsedTemperature = Number.isFinite(Number(temperature)) ? Number(temperature) : defaultTemperature;
+    const startTemperature = Math.min(safeTargetTempMax, Math.max(safeTargetTempMin, parsedTemperature));
 
     // Create batch
     const batch = new Batch({
@@ -64,11 +73,13 @@ const createBatch = async (req, res) => {
       originCoordinates,
       destinationCoordinates,
       quantityInStock,
-      temperature: temperature || 22,
+      temperature: startTemperature,
+      targetTempMin: safeTargetTempMin,
+      targetTempMax: safeTargetTempMax,
       stages: [{
         name: manufacturerInfo.name,
         location: 'manufacturer',
-        temperature: temperature || 22,
+        temperature: startTemperature,
         coordinates: {
           lat: manufacturerInfo.lat,
           lng: manufacturerInfo.lng
@@ -110,6 +121,10 @@ const createBatch = async (req, res) => {
         originCoordinates: batch.originCoordinates,
         destinationCoordinates: batch.destinationCoordinates,
         quantityInStock: batch.quantityInStock,
+        targetTempRange: {
+          min: batch.targetTempMin,
+          max: batch.targetTempMax
+        },
         currentStage: batch.currentStage,
         temperature: batch.temperature,
         trustScore: batch.trustScore,
@@ -145,6 +160,10 @@ const getAllBatches = async (req, res) => {
         originCoordinates: batch.originCoordinates,
         destinationCoordinates: batch.destinationCoordinates,
         quantityInStock: batch.quantityInStock,
+        targetTempRange: {
+          min: batch.targetTempMin,
+          max: batch.targetTempMax
+        },
         currentStage: batch.currentStage,
         temperature: batch.temperature,
         trustScore: batch.trustScore,

@@ -20,6 +20,8 @@ const Dashboard = () => {
     originCoordinates: null,
     destinationCoordinates: null,
     quantityInStock: '',
+    targetTempMin: 2,
+    targetTempMax: 8,
     temperature: 22
   });
 
@@ -51,7 +53,9 @@ const Dashboard = () => {
     }
 
     try {
-      await createBatch(formData);
+      const payload = { ...formData };
+      delete payload.temperature;
+      await createBatch(payload);
       setShowCreateForm(false);
       setFormData({
         batchId: '',
@@ -61,6 +65,8 @@ const Dashboard = () => {
         originCoordinates: null,
         destinationCoordinates: null,
         quantityInStock: '',
+        targetTempMin: 2,
+        targetTempMax: 8,
         temperature: 22
       });
     } catch (error) {
@@ -206,6 +212,29 @@ const Dashboard = () => {
                   onChange={(e) => setFormData({ ...formData, quantityInStock: e.target.value })}
                   className="input-field"
                 />
+                <div className="grid grid-cols-2 gap-3">
+                  <input
+                    type="number"
+                    step="0.1"
+                    placeholder="Safe Temp Min (°C)"
+                    value={formData.targetTempMin}
+                    onChange={(e) => setFormData({ ...formData, targetTempMin: e.target.value })}
+                    className="input-field"
+                    required
+                  />
+                  <input
+                    type="number"
+                    step="0.1"
+                    placeholder="Safe Temp Max (°C)"
+                    value={formData.targetTempMax}
+                    onChange={(e) => setFormData({ ...formData, targetTempMax: e.target.value })}
+                    className="input-field"
+                    required
+                  />
+                </div>
+                <p className="text-xs text-gray-500">
+                  The starting temperature is automatically placed inside the recommended range.
+                </p>
                 <div className="flex gap-2">
                   <button type="submit" className="btn-primary flex-1 text-sm py-2">
                     Create

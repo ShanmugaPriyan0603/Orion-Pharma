@@ -75,15 +75,28 @@ const normalizeHistory = (history = []) => {
     .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 };
 
-const getTemperatureStatus = (temperature) => {
+const getTargetRange = (batch) => {
+  const min = Number(batch?.targetTempMin);
+  const max = Number(batch?.targetTempMax);
+
+  if (Number.isFinite(min) && Number.isFinite(max)) {
+    return min <= max ? { min, max } : { min: max, max: min };
+  }
+
+  return COLD_CHAIN_RANGE;
+};
+
+const formatRange = (range) => `${range.min}°C - ${range.max}°C`;
+
+const getTemperatureStatus = (temperature, range = COLD_CHAIN_RANGE) => {
   if (!Number.isFinite(temperature)) {
     return { label: 'No data', tone: 'warning', color: 'text-gray-500' };
   }
 
-  if (temperature < COLD_CHAIN_RANGE.min || temperature > COLD_CHAIN_RANGE.max) {
+  if (temperature < range.min || temperature > range.max) {
     if (
-      temperature >= COLD_CHAIN_RANGE.min - 0.5 &&
-      temperature <= COLD_CHAIN_RANGE.max + 0.5
+      temperature >= range.min - 0.5 &&
+      temperature <= range.max + 0.5
     ) {
       return { label: 'Warning', tone: 'warning', color: 'text-orange-500' };
     }
@@ -92,8 +105,8 @@ const getTemperatureStatus = (temperature) => {
   }
 
   if (
-    temperature <= COLD_CHAIN_RANGE.min + 0.5 ||
-    temperature >= COLD_CHAIN_RANGE.max - 0.5
+    temperature <= range.min + 0.5 ||
+    temperature >= range.max - 0.5
   ) {
     return { label: 'Warning', tone: 'warning', color: 'text-orange-500' };
   }
@@ -147,6 +160,7 @@ const escapeCsv = (value) => {
 const calculateStageSummaries = (batch) => {
   const stages = normalizeHistory(batch.stages || []);
   const temperatureHistory = normalizeHistory(batch.temperatureHistory || []);
+  const targetRange = getTargetRange(batch);
 
   return STAGE_ORDER.map((stage, index) => {
     const stageEntry = stages.find((entry) => entry.location === stage);
@@ -181,7 +195,7 @@ const calculateStageSummaries = (batch) => {
     const max = Math.max(...temperatures);
     const average = temperatures.reduce((sum, value) => sum + value, 0) / temperatures.length;
     const excursionCount = temperatures.filter(
-      (value) => value < COLD_CHAIN_RANGE.min || value > COLD_CHAIN_RANGE.max
+      (value) => value < targetRange.min || value > targetRange.max
     ).length;
 
     return {
@@ -198,18 +212,59 @@ const calculateStageSummaries = (batch) => {
   });
 };
 
+const calculateBatchCompliance = (batch) => {
+  const history = normalizeHistory(batch?.temperatureHistory || []);
+
+  if (!history.length) {
+    return 100;
+  }
+
+  const targetRange = getTargetRange(batch);
+  const safeReadings = history.filter(
+    (entry) => entry.temperature >= targetRange.min && entry.temperature <= targetRange.max
+  ).length;
+
+  if (safeReadings === history.length) {
+    return 100;
+  }
+
+  const rangeWidth = Math.max(1, targetRange.max - targetRange.min);
+  const excursionPenalty = history.reduce((sum, entry) => {
+    if (entry.temperature < targetRange.min) {
+      return sum + ((targetRange.min - entry.temperature) / rangeWidth) * 30;
+    }
+
+    if (entry.temperature > targetRange.max) {
+      return sum + ((entry.temperature - targetRange.max) / rangeWidth) * 30;
+    }
+
+    return sum;
+  }, 0);
+
+  const volatilityPenalty = history.slice(1).reduce((sum, entry, index) => {
+    const previousTemperature = history[index].temperature;
+    return sum + (Math.abs(entry.temperature - previousTemperature) / rangeWidth) * 10;
+  }, 0);
+
+  const safeRatio = safeReadings / history.length;
+  const score = (safeRatio * 100) - excursionPenalty - volatilityPenalty;
+
+  return Math.max(0, Math.min(100, score));
+};
+
 const buildSelectedChartData = (batch) => {
   const history = normalizeHistory(batch?.temperatureHistory || []);
+  const targetRange = getTargetRange(batch);
   const labels = history.map((entry) => new Date(entry.timestamp).toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit'
   }));
   const temperatures = history.map((entry) => entry.temperature);
   const pointColors = temperatures.map((temperature) => {
-    if (temperature < COLD_CHAIN_RANGE.min || temperature > COLD_CHAIN_RANGE.max) {
+    if (temperature < targetRange.min || temperature > targetRange.max) {
       return '#ff3b30';
     }
-    if (temperature <= COLD_CHAIN_RANGE.min + 0.5 || temperature >= COLD_CHAIN_RANGE.max - 0.5) {
+    if (temperature <= targetRange.min + 0.5 || temperature >= targetRange.max - 0.5) {
       return '#ff9500';
     }
     return '#34c759';
@@ -219,8 +274,8 @@ const buildSelectedChartData = (batch) => {
     labels,
     datasets: [
       {
-        label: 'Safe Min 2°C',
-        data: labels.map(() => COLD_CHAIN_RANGE.min),
+        label: `Safe Min ${targetRange.min}°C`,
+        data: labels.map(() => targetRange.min),
         borderColor: 'rgba(52, 199, 89, 0.35)',
         borderDash: [6, 4],
         borderWidth: 1.5,
@@ -228,8 +283,8 @@ const buildSelectedChartData = (batch) => {
         fill: false
       },
       {
-        label: 'Safe Max 8°C',
-        data: labels.map(() => COLD_CHAIN_RANGE.max),
+        label: `Safe Max ${targetRange.max}°C`,
+        data: labels.map(() => targetRange.max),
         borderColor: 'rgba(52, 199, 89, 0.35)',
         borderDash: [6, 4],
         borderWidth: 1.5,
@@ -404,6 +459,7 @@ const ColdChain = () => {
   const selectedBatch = useMemo(() => {
     return detailedBatches.find((batch) => batch.batchId === selectedBatchId) || detailedBatches[0] || null;
   }, [detailedBatches, selectedBatchId]);
+  const selectedRange = useMemo(() => getTargetRange(selectedBatch), [selectedBatch]);
 
   useEffect(() => {
     if (!selectedBatchId && monitoredBatches[0]) {
@@ -532,6 +588,8 @@ const ColdChain = () => {
     return { min, max };
   }, [chartTemperatureValues]);
 
+  const activeRange = chartMode === 'selected' && chartBatch ? selectedRange : COLD_CHAIN_RANGE;
+
   const chartOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
@@ -601,18 +659,15 @@ const ColdChain = () => {
       ? detailedBatches.reduce((sum, batch) => sum + (batch.temperature || 0), 0) / detailedBatches.length
       : null;
 
-  const tempStatus = getTemperatureStatus(currentTemperature);
+  const tempStatus = getTemperatureStatus(currentTemperature, activeRange);
   const avgTrustScore = detailedBatches.length
     ? detailedBatches.reduce((sum, batch) => sum + (batch.trustScore || 0), 0) / detailedBatches.length
     : 0;
   const riskLevel = getRiskLabel(avgTrustScore - (activeAlerts.filter((alert) => alert.severity === 'critical').length * 6));
 
-  const allHistories = detailedBatches.flatMap((batch) => normalizeHistory(batch.temperatureHistory || []));
-  const safeReadings = allHistories.filter(
-    (entry) => entry.temperature >= COLD_CHAIN_RANGE.min && entry.temperature <= COLD_CHAIN_RANGE.max
-  ).length;
-  const complianceRate = allHistories.length
-    ? (safeReadings / allHistories.length) * 100
+  const batchComplianceRates = detailedBatches.map((batch) => calculateBatchCompliance(batch));
+  const complianceRate = batchComplianceRates.length
+    ? batchComplianceRates.reduce((sum, score) => sum + score, 0) / batchComplianceRates.length
     : 100;
 
   const now = new Date();
@@ -647,9 +702,7 @@ const ColdChain = () => {
   }, { Transport: 0, Storage: 0, Unknown: 0 });
 
   const mostCommonFailurePoint = Object.entries(stageFailureCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'Transport';
-  const averageExcursionRate = allHistories.length
-    ? ((allHistories.length - safeReadings) / allHistories.length) * 100
-    : 0;
+  const averageExcursionRate = 100 - complianceRate;
 
   const selectedJourneyStages = selectedBatch ? calculateStageSummaries(selectedBatch) : [];
   const routeTone = tempStatus.tone === 'critical'
@@ -771,7 +824,11 @@ const ColdChain = () => {
               <div>
                 <p className="text-xs uppercase tracking-wide text-gray-500">Live Temperature Monitoring</p>
                 <h2 className="text-2xl font-semibold mt-1">Temperature Chart</h2>
-                <p className="text-sm text-gray-500 mt-1">Safe range {COLD_CHAIN_RANGE.min}°C - {COLD_CHAIN_RANGE.max}°C</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  {chartMode === 'selected' && chartBatch
+                    ? `Safe range ${formatRange(selectedRange)}`
+                    : 'Fleet view shows all shipments against the default monitoring band.'}
+                </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
@@ -808,12 +865,13 @@ const ColdChain = () => {
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7 text-sm">
               {(chartMode === 'selected' ? [chartBatch].filter(Boolean) : detailedBatches).map((batch) => {
                 const temp = batch.temperature;
-                const status = getTemperatureStatus(temp);
+                const status = getTemperatureStatus(temp, getTargetRange(batch));
                 return (
                   <div key={batch.batchId} className="rounded-2xl border border-gray-200 p-3 bg-gray-50/80 xl:col-span-1">
                     <p className="text-xs uppercase tracking-wide text-gray-500">{batch.batchId}</p>
                     <p className={`text-lg font-semibold mt-1 ${status.color}`}>{Number.isFinite(temp) ? `${temp.toFixed(1)}°C` : '--'}</p>
                     <p className="text-xs text-gray-500 mt-1">{batch.medicineName}</p>
+                    <p className="text-xs text-gray-500 mt-1">Range: {formatRange(getTargetRange(batch))}</p>
                   </div>
                 );
               })}
@@ -829,6 +887,7 @@ const ColdChain = () => {
                     <th className="py-3 text-left">Required Range</th>
                     <th className="py-3 text-left">Location</th>
                     <th className="py-3 text-left">Status</th>
+                    <th className="py-3 text-left">Compliance</th>
                     <th className="py-3 text-left">Trust Score Impact</th>
                   </tr>
                 </thead>
@@ -836,18 +895,21 @@ const ColdChain = () => {
                   {detailedBatches.map((batch) => {
                     const impact = 100 - (batch.trustScore || 0);
                     const impactTone = impact > 30 ? 'text-red-600' : impact > 15 ? 'text-orange-500' : 'text-green-600';
+                    const batchCompliance = calculateBatchCompliance(batch);
+                    const batchRange = getTargetRange(batch);
                     return (
                       <tr key={batch.batchId} className="border-b border-gray-100 last:border-0">
                         <td className="py-3 font-medium">{batch.batchId}</td>
                         <td className="py-3 text-gray-600">{batch.medicineName}</td>
                         <td className="py-3">{batch.temperature?.toFixed(1)}°C</td>
-                        <td className="py-3">{COLD_CHAIN_RANGE.min}°C - {COLD_CHAIN_RANGE.max}°C</td>
+                        <td className="py-3">{batchRange.min}°C - {batchRange.max}°C</td>
                         <td className="py-3 capitalize">{batch.currentStage}</td>
                         <td className="py-3 capitalize">
                           <span className={`badge ${batch.status === 'delivered' ? 'badge-success' : batch.status === 'compromised' ? 'badge-danger' : 'badge-warning'}`}>
                             {batch.status}
                           </span>
                         </td>
+                        <td className="py-3 font-semibold text-gray-900">{batchCompliance.toFixed(1)}%</td>
                         <td className={`py-3 font-semibold ${impactTone}`}>
                           -{impact} pts
                         </td>
@@ -1034,7 +1096,7 @@ const ColdChain = () => {
                 <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3">
                   <p className="text-xs uppercase tracking-wide text-gray-500">Historical Trends</p>
                   <p className="text-lg font-semibold mt-1">{averageExcursionRate.toFixed(1)}% excursion rate</p>
-                  <p className="text-xs text-gray-500 mt-1">Average readings outside 2°C - 8°C</p>
+                  <p className="text-xs text-gray-500 mt-1">Average readings outside each shipment's safe range</p>
                 </div>
                 <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3">
                   <p className="text-xs uppercase tracking-wide text-gray-500">Most Common Failure Point</p>

@@ -40,15 +40,15 @@ const batchSchema = new mongoose.Schema({
   temperature: {
     type: Number,
     required: true,
-    default: 25
+    default: 5
   },
   targetTempMin: {
     type: Number,
-    default: 15
+    default: 2
   },
   targetTempMax: {
     type: Number,
-    default: 30
+    default: 8
   },
   trustScore: {
     type: Number,
