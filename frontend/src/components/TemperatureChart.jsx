@@ -22,7 +22,7 @@ ChartJS.register(
   Filler
 );
 
-const TemperatureChart = ({ temperatureHistory = [], targetTempRange = { min: 15, max: 30 } }) => {
+const TemperatureChart = ({ temperatureHistory = [], targetTempRange = { min: 2, max: 8 } }) => {
   const chartData = {
     labels: temperatureHistory.map((_, index) => {
       const time = new Date(temperatureHistory[index]?.timestamp || Date.now());

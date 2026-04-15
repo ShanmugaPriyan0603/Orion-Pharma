@@ -5,6 +5,29 @@ const mongoose = require('mongoose');
 const { storeHashLocal } = require('../services/blockchainService');
 const { startSimulation, stopSimulation } = require('../services/simulationService');
 
+const DEFAULT_TARGET_RANGE = { min: 2, max: 8 };
+const LEGACY_TARGET_RANGE = { min: 15, max: 30 };
+
+const normalizeLegacyTargetRanges = async () => {
+  await Batch.updateMany(
+    {
+      $or: [
+        { targetTempMin: { $exists: false } },
+        { targetTempMax: { $exists: false } },
+        { targetTempMin: null },
+        { targetTempMax: null },
+        { targetTempMin: LEGACY_TARGET_RANGE.min, targetTempMax: LEGACY_TARGET_RANGE.max }
+      ]
+    },
+    {
+      $set: {
+        targetTempMin: DEFAULT_TARGET_RANGE.min,
+        targetTempMax: DEFAULT_TARGET_RANGE.max
+      }
+    }
+  );
+};
+
 /**
  * Batch Controller
  * Handles CRUD operations for medicine batches
@@ -147,6 +170,7 @@ const createBatch = async (req, res) => {
  */
 const getAllBatches = async (req, res) => {
   try {
+    await normalizeLegacyTargetRanges();
     const batches = await Batch.find().sort({ createdAt: -1 });
 
     res.json({
@@ -187,6 +211,7 @@ const getAllBatches = async (req, res) => {
  */
 const getBatch = async (req, res) => {
   try {
+    await normalizeLegacyTargetRanges();
     const batch = await Batch.findOne({ batchId: req.params.id.toUpperCase() });
 
     if (!batch) {
@@ -241,6 +266,7 @@ const getBatch = async (req, res) => {
  */
 const verifyBatch = async (req, res) => {
   try {
+    await normalizeLegacyTargetRanges();
     const batch = await Batch.findOne({ batchId: req.params.batchId.toUpperCase() });
 
     if (!batch) {

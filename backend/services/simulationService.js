@@ -18,24 +18,43 @@ const STAGE_COORDINATES = {
   pharmacy: { lat: 35.2271, lng: -80.8431, name: 'Charlotte (Pharmacy)' }
 };
 
-// Normal temperature range with slight variations
-const BASE_TEMPERATURE = 22;
-const NORMAL_VARIATION = 3;
+const DEFAULT_TARGET_RANGE = { min: 2, max: 8 };
+
+const getSafeRange = (targetMin, targetMax) => {
+  const min = Number(targetMin);
+  const max = Number(targetMax);
+
+  if (Number.isFinite(min) && Number.isFinite(max)) {
+    return min <= max ? { min, max } : { min: max, max: min };
+  }
+
+  return DEFAULT_TARGET_RANGE;
+};
 
 /**
  * Generate realistic temperature reading
  */
 const generateTemperature = (options = {}) => {
-  const { breach = false, spike = false } = options;
+  const { breach = false, spike = false, targetMin, targetMax } = options;
+  const safeRange = getSafeRange(targetMin, targetMax);
 
   if (breach || spike) {
     // Generate temperature outside safe range
-    const breachTemp = spike ? 45 + Math.random() * 10 : 35 + Math.random() * 8;
+    const breachTemp = spike
+      ? safeRange.max + 8 + Math.random() * 6
+      : safeRange.max + 2 + Math.random() * 5;
     return Math.round(breachTemp * 10) / 10;
   }
 
-  // Normal temperature with small variation
-  const temp = BASE_TEMPERATURE + (Math.random() - 0.5) * NORMAL_VARIATION * 2;
+  // Normal temperature remains inside the configured safe range.
+  const rangeWidth = Math.max(0.5, safeRange.max - safeRange.min);
+  const margin = Math.min(0.4, rangeWidth * 0.2);
+  const floor = safeRange.min + margin;
+  const ceiling = safeRange.max - margin;
+  const low = floor <= ceiling ? floor : safeRange.min;
+  const high = floor <= ceiling ? ceiling : safeRange.max;
+  const temp = low + Math.random() * (high - low);
+
   return Math.round(temp * 10) / 10;
 };
 
@@ -50,7 +69,14 @@ const updateTemperature = async (batchId, options = {}) => {
   const { breach = false, spike = false, manualValue = null } = options;
 
   const previousTemp = batch.temperature;
-  const newTemp = manualValue !== null ? manualValue : generateTemperature({ breach, spike });
+  const newTemp = manualValue !== null
+    ? manualValue
+    : generateTemperature({
+        breach,
+        spike,
+        targetMin: batch.targetTempMin,
+        targetMax: batch.targetTempMax
+      });
 
   batch.temperature = newTemp;
 
@@ -132,7 +158,10 @@ const moveToNextStage = async (batchId) => {
   const stageInfo = STAGE_COORDINATES[nextStage];
 
   batch.currentStage = nextStage;
-  batch.temperature = generateTemperature();
+  batch.temperature = generateTemperature({
+    targetMin: batch.targetTempMin,
+    targetMax: batch.targetTempMax
+  });
 
   await batch.save();
 

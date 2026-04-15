@@ -44,6 +44,21 @@ const Dashboard = () => {
     return batches;
   }, [activeAlertBatchIds, activeFilter, batches]);
 
+  const selectedSafeRange = useMemo(() => {
+    if (!selectedBatch) {
+      return { min: 2, max: 8 };
+    }
+
+    const min = Number(selectedBatch?.targetTempRange?.min ?? selectedBatch?.targetTempMin);
+    const max = Number(selectedBatch?.targetTempRange?.max ?? selectedBatch?.targetTempMax);
+
+    if (Number.isFinite(min) && Number.isFinite(max)) {
+      return min <= max ? { min, max } : { min: max, max: min };
+    }
+
+    return { min: 2, max: 8 };
+  }, [selectedBatch]);
+
   const handleCreate = async (e) => {
     e.preventDefault();
 
@@ -316,7 +331,7 @@ const Dashboard = () => {
                   <div className="grid grid-cols-3 gap-4">
                     <div>
                       <p className="text-xs text-gray-500 uppercase tracking-wide">Temperature</p>
-                      <p className={`text-xl font-semibold mt-1 ${selectedBatch.temperature > 30 || selectedBatch.temperature < 15 ? 'text-red-500' : 'text-green-500'}`}>
+                      <p className={`text-xl font-semibold mt-1 ${selectedBatch.temperature > selectedSafeRange.max || selectedBatch.temperature < selectedSafeRange.min ? 'text-red-500' : 'text-green-500'}`}>
                         {selectedBatch.temperature}°C
                       </p>
                     </div>

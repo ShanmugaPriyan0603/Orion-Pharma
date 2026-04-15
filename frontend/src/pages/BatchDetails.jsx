@@ -37,6 +37,19 @@ const BatchDetails = () => {
   const [batchData, setBatchData] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const safeRange = {
+    min: Number.isFinite(Number(batchData?.targetTempRange?.min))
+      ? Number(batchData.targetTempRange.min)
+      : Number.isFinite(Number(batchData?.targetTempMin))
+        ? Number(batchData.targetTempMin)
+        : 2,
+    max: Number.isFinite(Number(batchData?.targetTempRange?.max))
+      ? Number(batchData.targetTempRange.max)
+      : Number.isFinite(Number(batchData?.targetTempMax))
+        ? Number(batchData.targetTempMax)
+        : 8
+  };
+
   const routeStats = batchData?.originCoordinates && batchData?.destinationCoordinates
     ? (() => {
         const directDistanceKm = haversineDistanceKm(batchData.originCoordinates, batchData.destinationCoordinates);
@@ -186,7 +199,7 @@ const BatchDetails = () => {
               <div className="h-64">
                 <TemperatureChart
                   temperatureHistory={batchData.temperatureHistory || []}
-                  targetTempRange={batchData.targetTempRange || { min: 15, max: 30 }}
+                  targetTempRange={safeRange}
                 />
               </div>
             </div>
@@ -227,13 +240,13 @@ const BatchDetails = () => {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Temperature</span>
-                  <span className={`font-medium ${batchData.temperature > 30 || batchData.temperature < 15 ? 'text-red-500' : 'text-green-500'}`}>
+                  <span className={`font-medium ${batchData.temperature > safeRange.max || batchData.temperature < safeRange.min ? 'text-red-500' : 'text-green-500'}`}>
                     {batchData.temperature}°C
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Safe Range</span>
-                  <span className="font-medium">{batchData.targetTempMin}°C - {batchData.targetTempMax}°C</span>
+                  <span className="font-medium">{safeRange.min}°C - {safeRange.max}°C</span>
                 </div>
                 {batchData.blockchainHash && (
                   <>
